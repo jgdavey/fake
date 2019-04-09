@@ -1,0 +1,9 @@
+[package]
+name = "fake"
+version = "0.1.0"
+authors = ["Joshua Davey <josh@joshuadavey.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.6.5"
+hashbrown = "0.2.0"

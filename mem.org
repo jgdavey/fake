@@ -1,0 +1,11 @@
+** TokSet
+
+| impl                        | plots-mini.txt | plots.txt |
+|-----------------------------+----------------+-----------|
+| BufferTokSet(buf, u16, u16) | 105M           | 378M      |
+| BufferTokset(buf, u8, u8)   | 105M           | 379M      |
+| BufferTokset(buf, u8, u16)  | 105M           | 378M      |
+| HashTokset                  | 148M           | 522M      |
+| BufferTokSet + Shrink       | 106M           | 389M      |
+| Shared Path BufferTokset    | 187M           | 546M      |
+
