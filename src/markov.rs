@@ -19,7 +19,6 @@ type HashTokSet = HashMap<TokID, u16>;
 
 pub trait TokSet {
     fn new() -> Self;
-    fn is_empty(&self) -> bool;
     fn add_entry(&mut self, entry: TokID);
     fn choose(&self, rng: &mut ThreadRng) -> TokID;
 }
@@ -27,10 +26,6 @@ pub trait TokSet {
 impl TokSet for HashTokSet {
     fn new() -> HashTokSet {
         HashTokSet::new()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.is_empty()
     }
 
     fn add_entry(&mut self, entry: TokID) {
@@ -179,9 +174,6 @@ impl TokSet for BufferTokSet {
     fn new() -> BufferTokSet {
         BufferTokSet::new()
     }
-    fn is_empty(&self) -> bool {
-        self.length() == 0
-    }
 
     fn add_entry(&mut self, entry: TokID) {
         self.add(entry);
@@ -255,26 +247,12 @@ pub enum Direction {
 }
 
 #[derive(Debug)]
-pub struct NextTokens {
-    forward: BufferTokSet,
-    reverse: BufferTokSet
-}
-
-impl NextTokens {
-    pub fn new() -> NextTokens {
-        NextTokens {
-            forward: BufferTokSet::new(),
-            reverse: BufferTokSet::new()
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct Chain
 {
     rng: ThreadRng,
     dict: Dict,
-    pub nexts: HashMap<Prefix2, NextTokens>,
+    forward: HashMap<Prefix2, BufferTokSet>,
+    reverse: HashMap<Prefix2, BufferTokSet>,
     entries: HashMap<Prefix1, BufferTokSet>,
 }
 
@@ -283,21 +261,24 @@ impl Chain
     pub fn new() -> Chain {
         let mut dict = Dict::new();
         let entry = Prefix2::entrypoint(&mut dict);
-        let mut nexts = HashMap::new();
-        let nexttokens = NextTokens::new();
-        nexts.insert(entry, nexttokens);
         Chain {
             rng: thread_rng(),
-            nexts,
             dict,
+            forward: {
+                let mut map = HashMap::new();
+                map.insert(entry, TokSet::new());
+                map
+            },
+            reverse: HashMap::new(),
             entries: HashMap::new()
         }
     }
 
     pub fn printsizes(&self) {
-        println!("Chain[dict: {}, nexts: {}, entries: {}]",
+        println!("Chain[dict: {}, forward: {}, reverse: {}, entries: {}]",
                  self.dict.entries.len(),
-                 self.nexts.len(),
+                 self.forward.len(),
+                 self.reverse.len(),
                  self.entries.len());
     }
 
@@ -306,22 +287,25 @@ impl Chain
             return self;
         }
         let none = self.dict.tokid(&None);
-        let mut toks = vec![none, none, none];
+        let mut toks = vec![none, none];
         toks.extend(tokens.into_iter().map(|t| self.dict.tokid(&Some(t))));
         toks.push(none);
-        toks.push(none);
-        for p in toks.windows(4) {
-            if let [a, b, c, d] = *p {
-                let prefix = (b,c);
-                self.nexts.entry(prefix).or_insert_with(NextTokens::new);
-                let toksets = self.nexts.get_mut(&prefix).unwrap();
-                toksets.forward.add_entry(d);
-                toksets.reverse.add_entry(a);
+        for p in toks.windows(3) {
+            if let &[a, b, c] = p {
+                let fprefix = (a,b);
+                self.forward.entry(fprefix).or_insert_with(TokSet::new);
+                let ftokset = self.forward.get_mut(&fprefix).unwrap();
+                ftokset.add_entry(c);
 
-                let eprefix: Prefix1 = b;
+                let rprefix = (c,b);
+                self.reverse.entry(rprefix).or_insert_with(TokSet::new);
+                let rtokset = self.reverse.get_mut(&rprefix).unwrap();
+                rtokset.add_entry(a);
+
+                let eprefix: Prefix1 = a;
                 self.entries.entry(eprefix).or_insert_with(TokSet::new);
                 let etokset = self.entries.get_mut(&eprefix).unwrap();
-                etokset.add_entry(c);
+                etokset.add_entry(b);
             }
         }
         self
@@ -359,11 +343,13 @@ impl Chain
     }
 
     pub fn generate_from_prefix(&mut self, dir: Direction, prefix: Prefix2) -> Vec<String> {
-        if !self.nexts.contains_key(&prefix) {
+        let m = match dir {
+            Direction::Forward => &self.forward,
+            Direction::Reverse => &self.reverse
+        };
+        if !m.contains_key(&prefix) {
             return Vec::new();
         }
-        let none = self.dict.tokid(&None);
-        let stop = (none, none);
         let mut ret = vec![];
 
         if let Some(Some(word)) = self.dict.entry(prefix.0) {
@@ -376,20 +362,9 @@ impl Chain
 
         let mut curs = prefix;
 
-        while let Some(toksets) = self.nexts.get(&curs) {
-            let m = match dir {
-                Direction::Forward => &toksets.forward,
-                Direction::Reverse => &toksets.reverse
-            };
-
-            let choice = m.choose(&mut self.rng);
-
-            curs = match dir {
-                Direction::Forward => (curs.1, choice),
-                Direction::Reverse => (choice, curs.0),
-            };
-            if curs == stop { break }
-
+        while let Some(tokset) = m.get(&curs) {
+            let choice = tokset.choose(&mut self.rng);
+            curs = (curs.1, choice);
             if let Some(Some(word)) = self.dict.entry(choice) {
                 ret.push(word.clone());
             }
@@ -407,10 +382,11 @@ impl Chain
         let s = self.dict.tokid(&Some(String::from(start).clone()));
         if let Some(possibles) = self.entries.get(&s) {
             let next_start = possibles.choose(&mut self.rng);
-            let prefix = (s, next_start);
+            let fprefix = (s, next_start);
+            let rprefix = (fprefix.1, fprefix.0);
 
-            let forward = self.generate_from_prefix(Direction::Forward, prefix);
-            let mut reverse = self.generate_from_prefix(Direction::Reverse, prefix);
+            let forward = self.generate_from_prefix(Direction::Forward, fprefix);
+            let mut reverse = self.generate_from_prefix(Direction::Reverse, rprefix);
             reverse.reverse();
             reverse.pop();
             reverse.pop();

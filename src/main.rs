@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Error, ErrorKind};
 use std::io::prelude::*;
 use std::path::Path;
 
@@ -10,8 +10,8 @@ fn read_line(prompt: &str) -> io::Result<String> {
     print!("{}", prompt);
     stdout.lock().flush()?;
     let stdin = io::stdin();
-    let line1 = stdin.lock().lines().next().unwrap()?;
-    Ok(line1)
+    let line = stdin.lock().lines().next();
+    line.unwrap_or(Err(Error::new(ErrorKind::Other, "EOF")))
 }
 
 fn main() {
@@ -28,10 +28,6 @@ fn main() {
 
     index.printsizes();
 
-    if filename == &default_file {
-        println!("{:#?}", index.nexts);
-    }
-
     loop {
         let res = read_line("seed> ");
         match res {
@@ -45,7 +41,10 @@ fn main() {
                     println!("\n{}\n", gen)
                 }
             },
-            Err(e) => println!("Error: {:?}", e)
+            Err(_) => {
+                println!("\nBye!");
+                break
+            }
         }
     }
 }
