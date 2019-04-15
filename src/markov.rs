@@ -293,18 +293,15 @@ impl Chain
         for p in toks.windows(3) {
             if let &[a, b, c] = p {
                 let fprefix = (a,b);
-                self.forward.entry(fprefix).or_insert_with(TokSet::new);
-                let ftokset = self.forward.get_mut(&fprefix).unwrap();
+                let ftokset = self.forward.entry(fprefix).or_insert_with(TokSet::new);
                 ftokset.add_entry(c);
 
                 let rprefix = (c,b);
-                self.reverse.entry(rprefix).or_insert_with(TokSet::new);
-                let rtokset = self.reverse.get_mut(&rprefix).unwrap();
+                let rtokset = self.reverse.entry(rprefix).or_insert_with(TokSet::new);
                 rtokset.add_entry(a);
 
                 let eprefix: Prefix1 = a;
-                self.entries.entry(eprefix).or_insert_with(TokSet::new);
-                let etokset = self.entries.get_mut(&eprefix).unwrap();
+                let etokset = self.entries.entry(eprefix).or_insert_with(TokSet::new);
                 etokset.add_entry(b);
             }
         }
