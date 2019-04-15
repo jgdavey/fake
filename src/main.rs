@@ -33,11 +33,13 @@ fn main() {
         match res {
             Ok(ref seed) if seed == "" => {
                 println!("(Empty)");
-                println!("\n{}\n", index.generate_str());
-            }
+                if let Some(gen) = index.generate_best(140) {
+                    println!("\n{}\n", gen);
+                }
+            },
             Ok(seed) => {
                 println!("{}", seed);
-                if let Some(gen) = index.generate_from_best(seed, 140) {
+                if let Some(gen) = index.generate_best_from(seed, 140) {
                     println!("\n{}\n", gen)
                 }
             },

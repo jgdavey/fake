@@ -344,10 +344,11 @@ impl Chain
             Direction::Forward => &self.forward,
             Direction::Reverse => &self.reverse
         };
-        if !m.contains_key(&prefix) {
-            return Vec::new();
-        }
         let mut ret = vec![];
+
+        if !m.contains_key(&prefix) {
+            return ret;
+        }
 
         if let Some(Some(word)) = self.dict.entry(prefix.0) {
             ret.push(word.clone());
@@ -370,12 +371,13 @@ impl Chain
         ret
     }
 
-    pub fn generate(&mut self) -> Vec<String> {
+    pub fn generate_one(&mut self) -> Option<String> {
         let none = self.dict.tokid(&None);
-        self.generate_from_prefix(Direction::Forward, (none, none))
+        let result = self.generate_from_prefix(Direction::Forward, (none, none));
+        Some(Chain::vec_to_string(result))
     }
 
-    pub fn generate_from(&mut self, start: &str) -> Option<String> {
+    pub fn generate_one_from(&mut self, start: &str) -> Option<String> {
         let s = self.dict.tokid(&Some(String::from(start).clone()));
         if let Some(possibles) = self.entries.get(&s) {
             let next_start = possibles.choose(&mut self.rng);
@@ -394,18 +396,37 @@ impl Chain
         }
     }
 
-    pub fn generate_from_best(&mut self, start: String, target_chars: i32) -> Option<String> {
-        if let Some(gen1) = self.generate_from(&start[..]) {
+    fn choose_best(gens: Vec<Option<String>>, target_chars: i32) -> Option<String> {
+        let mut sorted = gens.into_iter()
+            .filter_map(|o| o)
+            .collect::<Vec<_>>();
+        sorted.sort_by_key(|s| ((s.len() as i32) - target_chars).abs());
+        if sorted.is_empty() {
+            None
+        } else {
+            Some(sorted[0].clone())
+        }
+    }
+
+    pub fn generate_best_from(&mut self, start: String, target_chars: i32) -> Option<String> {
+        let gen1 = self.generate_one_from(&start[..]);
+        if let Some(_) = gen1 {
             let mut gens = vec![gen1];
-            gens.extend((1..50).map(|_| self.generate_from(&start[..]).unwrap()));
-            gens.sort_by_key(|s| ((s.len() as i32) - target_chars).abs());
-            Some(gens[0].clone())
+            gens.extend((1..50).map(|_| self.generate_one_from(&start[..])));
+            Self::choose_best(gens, target_chars)
         } else {
             None
         }
     }
 
-    pub fn generate_str(&mut self) -> String {
-        Chain::vec_to_string(self.generate())
+    pub fn generate_best(&mut self, target_chars: i32) -> Option<String> {
+        let gen1 = self.generate_one();
+        if let Some(_) = gen1 {
+            let mut gens = vec![gen1];
+            gens.extend((1..50).map(|_| self.generate_one()));
+            Self::choose_best(gens, target_chars)
+        } else {
+            None
+        }
     }
 }
