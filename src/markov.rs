@@ -409,24 +409,12 @@ impl Chain
     }
 
     pub fn generate_best_from(&mut self, start: String, target_chars: i32) -> Option<String> {
-        let gen1 = self.generate_one_from(&start[..]);
-        if let Some(_) = gen1 {
-            let mut gens = vec![gen1];
-            gens.extend((1..50).map(|_| self.generate_one_from(&start[..])));
-            Self::choose_best(gens, target_chars)
-        } else {
-            None
-        }
+        let gens: Vec<_> = (1..50).map(|_| self.generate_one_from(&start[..])).collect();
+        Self::choose_best(gens, target_chars)
     }
 
     pub fn generate_best(&mut self, target_chars: i32) -> Option<String> {
-        let gen1 = self.generate_one();
-        if let Some(_) = gen1 {
-            let mut gens = vec![gen1];
-            gens.extend((1..50).map(|_| self.generate_one()));
-            Self::choose_best(gens, target_chars)
-        } else {
-            None
-        }
+        let gens: Vec<_> = (1..50).map(|_| self.generate_one()).collect();
+        Self::choose_best(gens, target_chars)
     }
 }
