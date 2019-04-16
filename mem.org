@@ -7,5 +7,13 @@
 | BufferTokset(buf, u8, u16)  | 105M           | 378M      |
 | HashTokset                  | 148M           | 522M      |
 | BufferTokSet + Shrink       | 106M           | 389M      |
-| Shared Path BufferTokset    | 187M           | 546M      |
+
+** Full Markov chain
+
+| impl                    | plots-mini.txt | plots.txt |
+|-------------------------+----------------+-----------|
+| (fate, for reference)   | 219M           | 614M      |
+| Multiple HashMaps       | 205M           | 762M      |
+| Shared HashMaps, Nexts  | 187M           | 545M      |
+| Nested, shared HashMaps | 179M           | 456M      |
 

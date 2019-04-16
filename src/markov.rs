@@ -255,7 +255,7 @@ pub enum Direction {
 }
 
 #[derive(Debug)]
-pub struct NextTokens {
+struct NextTokens {
     forward: BufferTokSet,
     reverse: BufferTokSet
 }
@@ -270,34 +270,55 @@ impl NextTokens {
 }
 
 #[derive(Debug)]
+struct TokenPaths {
+    maps: HashMap<TokID, HashMap<TokID, NextTokens>>
+}
+
+impl TokenPaths {
+    fn new() -> TokenPaths {
+        TokenPaths {
+            maps: HashMap::new()
+        }
+    }
+
+    fn append(&mut self, prefix: Prefix2, forward_value: TokID, reverse_value: TokID) {
+        let nested = self.maps.entry(prefix.0).or_insert_with(HashMap::new);
+        let toksets = nested.entry(prefix.1).or_insert_with(NextTokens::new);
+        toksets.forward.add_entry(forward_value);
+        toksets.reverse.add_entry(reverse_value);
+    }
+
+    fn get(&self, prefix: Prefix2) -> Option<&NextTokens> {
+        self.maps.get(&prefix.0).and_then(|nested| nested.get(&prefix.1))
+    }
+}
+
+type Entries = HashMap<TokID, BufferTokSet>;
+
+#[derive(Debug)]
 pub struct Chain
 {
     rng: ThreadRng,
     dict: Dict,
-    pub nexts: HashMap<Prefix2, NextTokens>,
-    entries: HashMap<Prefix1, BufferTokSet>,
+    paths: TokenPaths,
+    entries: Entries
 }
 
 impl Chain
 {
     pub fn new() -> Chain {
-        let mut dict = Dict::new();
-        let entry = Prefix2::entrypoint(&mut dict);
-        let mut nexts = HashMap::new();
-        let nexttokens = NextTokens::new();
-        nexts.insert(entry, nexttokens);
         Chain {
             rng: thread_rng(),
-            nexts,
-            dict,
+            paths: TokenPaths::new(),
+            dict: Dict::new(),
             entries: HashMap::new()
         }
     }
 
     pub fn printsizes(&self) {
-        println!("Chain[dict: {}, nexts: {}, entries: {}]",
+        println!("Chain[dict: {}, paths: {}, entries: {}]",
                  self.dict.entries.len(),
-                 self.nexts.len(),
+                 self.paths.maps.len(),
                  self.entries.len());
     }
 
@@ -311,11 +332,9 @@ impl Chain
         toks.push(none);
         toks.push(none);
         for p in toks.windows(4) {
-            if let &[a, b, c, d] = p {
+            if let [a, b, c, d] = *p {
                 let prefix = (b,c);
-                let toksets = self.nexts.entry(prefix).or_insert_with(NextTokens::new);
-                toksets.forward.add_entry(d);
-                toksets.reverse.add_entry(a);
+                self.paths.append(prefix, d, a);
 
                 let eprefix: Prefix1 = b;
                 let etokset = self.entries.entry(eprefix).or_insert_with(TokSet::new);
@@ -359,9 +378,10 @@ impl Chain
     pub fn generate_from_prefix(&mut self, dir: Direction, prefix: Prefix2) -> Vec<String> {
         let mut ret = vec![];
 
-        if !self.nexts.contains_key(&prefix) {
-            return Vec::new();
+        if self.paths.get(prefix).is_none() {
+            return ret;
         }
+
         let none = self.dict.tokid(&None);
         let stop = (none, none);
 
@@ -375,7 +395,7 @@ impl Chain
 
         let mut curs = prefix;
 
-        while let Some(toksets) = self.nexts.get(&curs) {
+        while let Some(toksets) = self.paths.get(curs) {
             let m = match dir {
                 Direction::Forward => &toksets.forward,
                 Direction::Reverse => &toksets.reverse
