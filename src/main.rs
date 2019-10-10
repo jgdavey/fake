@@ -18,7 +18,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let default_file = String::from("example.txt");
     let filename = match args.len() {
-        0...1 => &default_file,
+        0..=1 => &default_file,
         _ => &args[1],
     };
 
