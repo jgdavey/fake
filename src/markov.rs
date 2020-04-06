@@ -7,9 +7,9 @@ use std::path::Path;
 use std::rc::Rc;
 use std::vec::Vec;
 
-use rand::seq::SliceRandom;
-use rand::{Rng,thread_rng};
 use rand::rngs::ThreadRng;
+use rand::seq::SliceRandom;
+use rand::{thread_rng, Rng};
 
 type TokID = u32;
 type Prefix1 = TokID;
@@ -48,7 +48,7 @@ impl TokSet for HashTokSet {
 struct BufferTokSet {
     buf: Vec<u8>,
     c2: u16,
-    c1: u16
+    c1: u16,
 }
 
 impl BufferTokSet {
@@ -56,7 +56,7 @@ impl BufferTokSet {
         BufferTokSet {
             buf: Vec::new(),
             c2: 0,
-            c1: 0
+            c1: 0,
         }
     }
     fn length(&self) -> usize {
@@ -69,9 +69,7 @@ impl BufferTokSet {
     fn get(&self, index: usize) -> TokID {
         // [b0 b1 b2 b3 | b4 b4 b5 b5 | b6 b6 b6 b7 b7 b7 b8 b8 b8]
         //  0  1  2  3    4  5  6  7    8  9  10 11 12 13 14 15 16
-        let offsets = [0,
-                       self.c1 as usize,
-                       self.c1 as usize + self.c2 as usize];
+        let offsets = [0, self.c1 as usize, self.c1 as usize + self.c2 as usize];
         if index < offsets[1] {
             TokID::from(self.buf[index])
         } else if index < offsets[2] {
@@ -79,15 +77,15 @@ impl BufferTokSet {
             let shift = (index - offset) * 2;
             let i = (self.c1 as usize) + shift;
             let b1 = TokID::from(self.buf[i]);
-            let b2 = TokID::from(self.buf[i+1]) << 8;
+            let b2 = TokID::from(self.buf[i + 1]) << 8;
             b1 + b2
         } else {
             let offset = offsets[2];
             let shift = (index - offset) * 3;
             let i = (self.c1 as usize) + (self.c2 as usize * 2) + shift;
             let b1 = TokID::from(self.buf[i]);
-            let b2 = TokID::from(self.buf[i+1]) << 8;
-            let b3 = TokID::from(self.buf[i+2]) << 16;
+            let b2 = TokID::from(self.buf[i + 1]) << 8;
+            let b3 = TokID::from(self.buf[i + 2]) << 16;
             b1 + b2 + b3
         }
     }
@@ -100,7 +98,7 @@ impl BufferTokSet {
         // [b1 b2 b3 | b4 b4 b5 b5 | b6 b6 b6 b7 b7 b7]
         // Insert at end of c2
         let byte1 = tok as u8;
-        let byte2 = tok>>8 as u8;
+        let byte2 = tok >> 8 as u8;
         let insert = u32::from(self.c1) + u32::from(self.c2) * 2;
         self.buf.insert(insert as usize, byte1 as u8);
         self.buf.insert((insert + 1) as usize, byte2 as u8);
@@ -108,8 +106,8 @@ impl BufferTokSet {
     }
     fn add3(&mut self, tok: TokID) {
         let byte1 = tok as u8;
-        let byte2 = tok>>8 as u8;
-        let byte3 = tok>>16 as u8;
+        let byte2 = tok >> 8 as u8;
+        let byte3 = tok >> 16 as u8;
         self.buf.push(byte1 as u8);
         self.buf.push(byte2 as u8);
         self.buf.push(byte3 as u8);
@@ -251,33 +249,33 @@ impl Prefix for Prefix2 {
 
 pub enum Direction {
     Forward,
-    Reverse
+    Reverse,
 }
 
 #[derive(Debug)]
 struct NextTokens {
     forward: BufferTokSet,
-    reverse: BufferTokSet
+    reverse: BufferTokSet,
 }
 
 impl NextTokens {
     pub fn new() -> NextTokens {
         NextTokens {
             forward: BufferTokSet::new(),
-            reverse: BufferTokSet::new()
+            reverse: BufferTokSet::new(),
         }
     }
 }
 
 #[derive(Debug)]
 struct TokenPaths {
-    maps: HashMap<TokID, HashMap<TokID, NextTokens>>
+    maps: HashMap<TokID, HashMap<TokID, NextTokens>>,
 }
 
 impl TokenPaths {
     fn new() -> TokenPaths {
         TokenPaths {
-            maps: HashMap::new()
+            maps: HashMap::new(),
         }
     }
 
@@ -289,7 +287,9 @@ impl TokenPaths {
     }
 
     fn get(&self, prefix: Prefix2) -> Option<&NextTokens> {
-        self.maps.get(&prefix.0).and_then(|nested| nested.get(&prefix.1))
+        self.maps
+            .get(&prefix.0)
+            .and_then(|nested| nested.get(&prefix.1))
     }
 
     fn iterator(&self, direction: Direction, start: Prefix2) -> TokenIter {
@@ -297,7 +297,7 @@ impl TokenPaths {
             paths: &self,
             direction,
             prefix: start,
-            rng: thread_rng()
+            rng: thread_rng(),
         }
     }
 }
@@ -306,7 +306,7 @@ struct TokenIter<'a> {
     paths: &'a TokenPaths,
     direction: Direction,
     rng: ThreadRng,
-    prefix: (TokID, TokID)
+    prefix: (TokID, TokID),
 }
 
 impl<'a> Iterator for TokenIter<'a> {
@@ -318,7 +318,7 @@ impl<'a> Iterator for TokenIter<'a> {
 
         let m = match self.direction {
             Forward => &toksets.forward,
-            Reverse => &toksets.reverse
+            Reverse => &toksets.reverse,
         };
 
         let choice = m.choose(&mut self.rng);
@@ -335,30 +335,30 @@ impl<'a> Iterator for TokenIter<'a> {
 type Entries = HashMap<TokID, BufferTokSet>;
 
 #[derive(Debug)]
-pub struct Chain
-{
+pub struct Chain {
     rng: ThreadRng,
     dict: Dict,
     paths: TokenPaths,
-    entries: Entries
+    entries: Entries,
 }
 
-impl Chain
-{
+impl Chain {
     pub fn new() -> Chain {
         Chain {
             rng: thread_rng(),
             paths: TokenPaths::new(),
             dict: Dict::new(),
-            entries: HashMap::new()
+            entries: HashMap::new(),
         }
     }
 
     pub fn printsizes(&self) {
-        println!("Chain[dict: {}, paths: {}, entries: {}]",
-                 self.dict.entries.len(),
-                 self.paths.maps.len(),
-                 self.entries.len());
+        println!(
+            "Chain[dict: {}, paths: {}, entries: {}]",
+            self.dict.entries.len(),
+            self.paths.maps.len(),
+            self.entries.len()
+        );
     }
 
     pub fn feed(&mut self, tokens: Vec<String>) -> &mut Chain {
@@ -372,7 +372,7 @@ impl Chain
         toks.push(none);
         for p in toks.windows(4) {
             if let [a, b, c, d] = *p {
-                let prefix = (b,c);
+                let prefix = (b, c);
                 self.paths.append(prefix, d, a);
 
                 let eprefix: Prefix1 = b;
@@ -431,7 +431,9 @@ impl Chain
             ret.push(word.clone());
         }
 
-        let iter = self.paths.iterator(dir, prefix)
+        let iter = self
+            .paths
+            .iterator(dir, prefix)
             .take_while(|i| *i != none)
             .filter_map(|x| self.dict.entry(x))
             .filter_map(|x| x.clone());
@@ -466,9 +468,7 @@ impl Chain
     }
 
     fn choose_best(gens: Vec<Option<String>>, target_chars: i32) -> Option<String> {
-        let mut sorted = gens.into_iter()
-            .filter_map(|o| o)
-            .collect::<Vec<_>>();
+        let mut sorted = gens.into_iter().filter_map(|o| o).collect::<Vec<_>>();
         sorted.sort_by_key(|s| ((s.len() as i32) - target_chars).abs());
         if sorted.is_empty() {
             None
@@ -478,7 +478,9 @@ impl Chain
     }
 
     pub fn generate_best_from(&mut self, start: String, target_chars: i32) -> Option<String> {
-        let gens: Vec<_> = (1..50).map(|_| self.generate_one_from(&start[..])).collect();
+        let gens: Vec<_> = (1..50)
+            .map(|_| self.generate_one_from(&start[..]))
+            .collect();
         Self::choose_best(gens, target_chars)
     }
 
