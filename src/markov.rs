@@ -291,6 +291,45 @@ impl TokenPaths {
     fn get(&self, prefix: Prefix2) -> Option<&NextTokens> {
         self.maps.get(&prefix.0).and_then(|nested| nested.get(&prefix.1))
     }
+
+    fn iterator(&self, direction: Direction, start: Prefix2) -> TokenIter {
+        TokenIter {
+            paths: &self,
+            direction,
+            prefix: start,
+            rng: thread_rng()
+        }
+    }
+}
+
+struct TokenIter<'a> {
+    paths: &'a TokenPaths,
+    direction: Direction,
+    rng: ThreadRng,
+    prefix: (TokID, TokID)
+}
+
+impl<'a> Iterator for TokenIter<'a> {
+    type Item = TokID;
+
+    fn next(&mut self) -> Option<TokID> {
+        use Direction::{Forward, Reverse};
+        let toksets = self.paths.get(self.prefix)?;
+
+        let m = match self.direction {
+            Forward => &toksets.forward,
+            Reverse => &toksets.reverse
+        };
+
+        let choice = m.choose(&mut self.rng);
+
+        self.prefix = match self.direction {
+            Forward => (self.prefix.1, choice),
+            Reverse => (choice, self.prefix.0),
+        };
+
+        Some(choice)
+    }
 }
 
 type Entries = HashMap<TokID, BufferTokSet>;
@@ -383,7 +422,6 @@ impl Chain
         }
 
         let none = self.dict.tokid(&None);
-        let stop = (none, none);
 
         if let Some(Some(word)) = self.dict.entry(prefix.0) {
             ret.push(word.clone());
@@ -393,26 +431,12 @@ impl Chain
             ret.push(word.clone());
         }
 
-        let mut curs = prefix;
+        let iter = self.paths.iterator(dir, prefix)
+            .take_while(|i| *i != none)
+            .filter_map(|x| self.dict.entry(x))
+            .filter_map(|x| x.clone());
 
-        while let Some(toksets) = self.paths.get(curs) {
-            let m = match dir {
-                Direction::Forward => &toksets.forward,
-                Direction::Reverse => &toksets.reverse
-            };
-
-            let choice = m.choose(&mut self.rng);
-
-            curs = match dir {
-                Direction::Forward => (curs.1, choice),
-                Direction::Reverse => (choice, curs.0),
-            };
-            if curs == stop { break }
-
-            if let Some(Some(word)) = self.dict.entry(choice) {
-                ret.push(word.clone());
-            }
-        }
+        ret.extend(iter);
 
         ret
     }
