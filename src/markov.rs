@@ -4,7 +4,7 @@ use std::hash::Hash;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::vec::Vec;
 
 use rand::rngs::ThreadRng;
@@ -193,8 +193,8 @@ impl TokSet for BufferTokSet {
 
 #[derive(PartialEq, Debug)]
 pub struct Dict {
-    tokenids: HashMap<Rc<Token>, TokID>,
-    entries: Vec<Rc<Token>>,
+    tokenids: HashMap<Arc<Token>, TokID>,
+    entries: Vec<Arc<Token>>,
 }
 
 impl Dict {
@@ -209,7 +209,7 @@ impl Dict {
         if let Some(found) = self.tokenids.get(token) {
             return *found;
         }
-        let owntoken = Rc::new(token.to_owned());
+        let owntoken = Arc::new(token.to_owned());
         let tokid = self.entries.len() as TokID;
         self.tokenids.insert(owntoken.clone(), tokid);
         self.entries.push(owntoken);
@@ -336,7 +336,6 @@ type Entries = HashMap<TokID, BufferTokSet>;
 
 #[derive(Debug)]
 pub struct Chain {
-    rng: ThreadRng,
     dict: Dict,
     paths: TokenPaths,
     entries: Entries,
@@ -345,7 +344,6 @@ pub struct Chain {
 impl Chain {
     pub fn new() -> Chain {
         Chain {
-            rng: thread_rng(),
             paths: TokenPaths::new(),
             dict: Dict::new(),
             entries: HashMap::new(),
@@ -449,10 +447,10 @@ impl Chain {
         Some(Chain::vec_to_string(result))
     }
 
-    pub fn generate_one_from(&mut self, start: &str) -> Option<String> {
+    pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<String> {
         let s = self.dict.tokid(&Some(String::from(start).clone()));
         if let Some(possibles) = self.entries.get(&s) {
-            let next_start = possibles.choose(&mut self.rng);
+            let next_start = possibles.choose(rng);
             let prefix = (s, next_start);
 
             let forward = self.generate_from_prefix(Direction::Forward, prefix);
@@ -478,8 +476,9 @@ impl Chain {
     }
 
     pub fn generate_best_from(&mut self, start: String, target_chars: i32) -> Option<String> {
+        let mut rng = thread_rng();
         let gens: Vec<_> = (1..50)
-            .map(|_| self.generate_one_from(&start[..]))
+            .map(|_| self.generate_one_from(&mut rng, &start[..]))
             .collect();
         Self::choose_best(gens, target_chars)
     }
