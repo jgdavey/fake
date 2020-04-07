@@ -448,7 +448,7 @@ impl Chain {
     }
 
     pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<String> {
-        let s = self.dict.tokid(&Some(String::from(start).clone()));
+        let s = self.dict.tokid(&Some(start.to_string()));
         if let Some(possibles) = self.entries.get(&s) {
             let next_start = possibles.choose(rng);
             let prefix = (s, next_start);
