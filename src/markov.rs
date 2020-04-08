@@ -216,6 +216,10 @@ impl Dict {
         tokid
     }
 
+    pub fn get_tokid(&self, token: &Token) -> Option<TokID> {
+        self.tokenids.get(token).cloned()
+    }
+
     pub fn entry(&self, token_id: TokID) -> Option<&Token> {
         self.entries.get(token_id as usize).map(|l| &**l)
     }
@@ -413,32 +417,18 @@ impl Chain {
     }
 
     pub fn generate_from_prefix(&mut self, dir: Direction, prefix: Prefix2) -> Vec<String> {
-        let mut ret = vec![];
-
         if self.paths.get(prefix).is_none() {
-            return ret;
+            return vec![];
         }
 
         let none = self.dict.tokid(&None);
 
-        if let Some(Some(word)) = self.dict.entry(prefix.0) {
-            ret.push(word.clone());
-        }
-
-        if let Some(Some(word)) = self.dict.entry(prefix.1) {
-            ret.push(word.clone());
-        }
-
-        let iter = self
-            .paths
+        self.paths
             .iterator(dir, prefix)
             .take_while(|i| *i != none)
             .filter_map(|x| self.dict.entry(x))
-            .filter_map(|x| x.clone());
-
-        ret.extend(iter);
-
-        ret
+            .filter_map(|x| x.clone())
+            .collect()
     }
 
     pub fn generate_one(&mut self) -> Option<String> {
@@ -448,21 +438,40 @@ impl Chain {
     }
 
     pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<String> {
-        let s = self.dict.tokid(&Some(start.to_string()));
-        if let Some(possibles) = self.entries.get(&s) {
-            let next_start = possibles.choose(rng);
-            let prefix = (s, next_start);
-
-            let forward = self.generate_from_prefix(Direction::Forward, prefix);
-            let mut reverse = self.generate_from_prefix(Direction::Reverse, prefix);
-            reverse.reverse();
-            reverse.pop();
-            reverse.pop();
-            reverse.extend(forward);
-            Some(Chain::vec_to_string(reverse))
-        } else {
-            None
+        let mut phrase = vec![];
+        for word in start.split_whitespace() {
+            let tokid = self.dict.get_tokid(&Some(word.to_string()))?;
+            phrase.push(tokid)
         }
+
+        match phrase.len() {
+            0 => {
+                return self.generate_one();
+            }
+            1 => {
+                // One-word phrases use entries to get the next
+                let possibles = self.entries.get(&phrase[0])?;
+                phrase.push(possibles.choose(rng));
+            }
+            _ => {
+                // TODO Ensure the phrase can be reconstructed
+            }
+        }
+
+        let size = phrase.len();
+        let reverse_prefix = (phrase[0], phrase[1]);
+        let forward_prefix = (phrase[size - 2], phrase[size - 1]);
+        let end = self.generate_from_prefix(Direction::Forward, forward_prefix);
+        let mut begin = self.generate_from_prefix(Direction::Reverse, reverse_prefix);
+        let middle: Vec<_> = phrase
+            .iter()
+            .filter_map(|x| self.dict.entry(*x))
+            .filter_map(|x| x.clone())
+            .collect();
+        begin.reverse();
+        begin.extend(middle);
+        begin.extend(end);
+        Some(Chain::vec_to_string(begin))
     }
 
     fn choose_best(gens: Vec<Option<String>>, target_chars: i32) -> Option<String> {
