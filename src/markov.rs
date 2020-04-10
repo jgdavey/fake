@@ -411,13 +411,12 @@ impl Chain {
             .collect()
     }
 
-    pub fn generate_one(&mut self) -> Option<String> {
+    pub fn generate_one(&mut self) -> Option<Vec<String>> {
         let none = self.dict.tokid("");
-        let result = self.generate_from_prefix(Direction::Forward, (none, none));
-        Some(result.join(" "))
+        Some(self.generate_from_prefix(Direction::Forward, (none, none)))
     }
 
-    pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<String> {
+    pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<Vec<String>> {
         let mut phrase = vec![];
         for word in start.split_whitespace() {
             let tokid = self.dict.get_tokid(&word.to_string())?;
@@ -447,12 +446,12 @@ impl Chain {
         begin.reverse();
         begin.extend(middle);
         begin.extend(end);
-        Some(begin.join(" "))
+        Some(begin)
     }
 
-    fn choose_best(gens: Vec<Option<String>>, target_chars: i32) -> Option<String> {
+    fn choose_best(gens: Vec<Option<Vec<String>>>, target_words: i32) -> Option<Vec<String>> {
         let mut sorted = gens.into_iter().filter_map(|o| o).collect::<Vec<_>>();
-        sorted.sort_by_key(|s| ((s.len() as i32) - target_chars).abs());
+        sorted.sort_by_key(|s| ((s.len() as i32) - target_words).abs());
         if sorted.is_empty() {
             None
         } else {
@@ -460,16 +459,16 @@ impl Chain {
         }
     }
 
-    pub fn generate_best_from(&mut self, start: String, target_chars: i32) -> Option<String> {
+    pub fn generate_best_from(&mut self, start: String, target_words: i32) -> Option<String> {
         let mut rng = thread_rng();
         let gens: Vec<_> = (1..50)
             .map(|_| self.generate_one_from(&mut rng, &start[..]))
             .collect();
-        Self::choose_best(gens, target_chars)
+        Self::choose_best(gens, target_words).map(|v| v.join(" "))
     }
 
-    pub fn generate_best(&mut self, target_chars: i32) -> Option<String> {
+    pub fn generate_best(&mut self, target_words: i32) -> Option<String> {
         let gens: Vec<_> = (1..50).map(|_| self.generate_one()).collect();
-        Self::choose_best(gens, target_chars)
+        Self::choose_best(gens, target_words).map(|v| v.join(" "))
     }
 }

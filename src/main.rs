@@ -110,13 +110,17 @@ async fn main() {
     if config.debug {
         index.printsizes();
     }
+    let debug = config.debug;
 
     let (tx_req, mut rx_req) = mpsc::channel::<MarkovRequestMessage>(100);
 
     let _responder = tokio::spawn(async move {
         while let Some(work) = rx_req.recv().await {
             let (req, mut tx_resp): MarkovRequestMessage = work;
-            let target = req.target.unwrap_or(100);
+            let target = req.target.unwrap_or(20);
+            if debug {
+                println!("Processing request: {:?}", req);
+            }
             let response = match req.seed {
                 None => index.generate_best(target),
                 Some(seed) => index.generate_best_from(seed, target),
@@ -129,7 +133,7 @@ async fn main() {
     });
 
     if let Some(port) = config.port {
-        // POST / {"seed": "Sean", "target": 120}
+        // POST / {"seed": "Sean", "target": 20}
         let endpoint = warp::post()
             .and(warp::body::json())
             .and(warp::any().map(move || tx_req.clone()))
