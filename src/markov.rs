@@ -15,7 +15,6 @@ use indexmap::IndexSet;
 type TokID = u32;
 type Prefix1 = TokID;
 type Prefix2 = (TokID, TokID);
-type Token = String;
 type HashTokSet = HashMap<TokID, u16>;
 
 pub trait TokSet {
@@ -194,30 +193,28 @@ impl TokSet for BufferTokSet {
 
 #[derive(PartialEq, Debug)]
 pub struct Dict {
-    entries: IndexSet<Token>
+    entries: IndexSet<String>,
 }
 
 impl Dict {
     pub fn new() -> Dict {
         Dict {
-            entries: IndexSet::new()
+            entries: IndexSet::new(),
         }
     }
 
-    pub fn tokid(&mut self, token: &Token) -> TokID {
+    pub fn tokid(&mut self, token: &str) -> TokID {
         match self.entries.get_full(token) {
-            Some((u,_)) => u as TokID,
-            None => {
-                self.entries.insert_full(token.clone()).0 as TokID
-            }
+            Some((u, _)) => u as TokID,
+            None => self.entries.insert_full(token.to_string()).0 as TokID,
         }
     }
 
-    pub fn get_tokid(&self, token: &Token) -> Option<TokID> {
-        self.entries.get_full(token).map(|(u,_)| u as TokID)
+    pub fn get_tokid(&self, token: &str) -> Option<TokID> {
+        self.entries.get_full(token).map(|(u, _)| u as TokID)
     }
 
-    pub fn entry(&self, token_id: TokID) -> Option<Token> {
+    pub fn entry(&self, token_id: TokID) -> Option<String> {
         self.entries.get_index(token_id as usize).cloned()
     }
 }
@@ -233,7 +230,7 @@ impl Prefix for Prefix1 {
     }
 
     fn entrypoint(dict: &mut Dict) -> Prefix1 {
-        dict.tokid(&Token::from(""))
+        dict.tokid("")
     }
 }
 
@@ -243,7 +240,7 @@ impl Prefix for Prefix2 {
     }
 
     fn entrypoint(dict: &mut Dict) -> Prefix2 {
-        let none = dict.tokid(&Token::from(""));
+        let none = dict.tokid("");
         (none, none)
     }
 }
@@ -364,7 +361,7 @@ impl Chain {
         if tokens.is_empty() {
             return self;
         }
-        let none = self.dict.tokid(&Token::from(""));
+        let none = self.dict.tokid("");
         let mut toks = vec![none, none, none];
         toks.extend(tokens.into_iter().map(|t| self.dict.tokid(&t)));
         toks.push(none);
@@ -405,7 +402,7 @@ impl Chain {
             return vec![];
         }
 
-        let none = self.dict.tokid(&Token::from(""));
+        let none = self.dict.tokid("");
 
         self.paths
             .iterator(dir, prefix)
@@ -415,7 +412,7 @@ impl Chain {
     }
 
     pub fn generate_one(&mut self) -> Option<String> {
-        let none = self.dict.tokid(&Token::from(""));
+        let none = self.dict.tokid("");
         let result = self.generate_from_prefix(Direction::Forward, (none, none));
         Some(result.join(" "))
     }
@@ -446,10 +443,7 @@ impl Chain {
         let forward_prefix = (phrase[size - 2], phrase[size - 1]);
         let end = self.generate_from_prefix(Direction::Forward, forward_prefix);
         let mut begin = self.generate_from_prefix(Direction::Reverse, reverse_prefix);
-        let middle: Vec<_> = phrase
-            .iter()
-            .filter_map(|x| self.dict.entry(*x))
-            .collect();
+        let middle: Vec<_> = phrase.iter().filter_map(|x| self.dict.entry(*x)).collect();
         begin.reverse();
         begin.extend(middle);
         begin.extend(end);
