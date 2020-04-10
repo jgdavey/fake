@@ -4,17 +4,18 @@ use std::hash::Hash;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
 use std::path::Path;
-use std::sync::Arc;
 use std::vec::Vec;
 
 use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 
+use indexmap::IndexSet;
+
 type TokID = u32;
 type Prefix1 = TokID;
 type Prefix2 = (TokID, TokID);
-type Token = Option<String>;
+type Token = String;
 type HashTokSet = HashMap<TokID, u16>;
 
 pub trait TokSet {
@@ -193,35 +194,31 @@ impl TokSet for BufferTokSet {
 
 #[derive(PartialEq, Debug)]
 pub struct Dict {
-    tokenids: HashMap<Arc<Token>, TokID>,
-    entries: Vec<Arc<Token>>,
+    entries: IndexSet<Token>
 }
 
 impl Dict {
     pub fn new() -> Dict {
         Dict {
-            tokenids: HashMap::new(),
-            entries: Vec::new(),
+            entries: IndexSet::new()
         }
     }
 
     pub fn tokid(&mut self, token: &Token) -> TokID {
-        if let Some(found) = self.tokenids.get(token) {
-            return *found;
+        match self.entries.get_full(token) {
+            Some((u,_)) => u as TokID,
+            None => {
+                self.entries.insert_full(token.clone()).0 as TokID
+            }
         }
-        let owntoken = Arc::new(token.to_owned());
-        let tokid = self.entries.len() as TokID;
-        self.tokenids.insert(owntoken.clone(), tokid);
-        self.entries.push(owntoken);
-        tokid
     }
 
     pub fn get_tokid(&self, token: &Token) -> Option<TokID> {
-        self.tokenids.get(token).cloned()
+        self.entries.get_full(token).map(|(u,_)| u as TokID)
     }
 
-    pub fn entry(&self, token_id: TokID) -> Option<&Token> {
-        self.entries.get(token_id as usize).map(|l| &**l)
+    pub fn entry(&self, token_id: TokID) -> Option<Token> {
+        self.entries.get_index(token_id as usize).cloned()
     }
 }
 
@@ -236,7 +233,7 @@ impl Prefix for Prefix1 {
     }
 
     fn entrypoint(dict: &mut Dict) -> Prefix1 {
-        dict.tokid(&None)
+        dict.tokid(&Token::from(""))
     }
 }
 
@@ -246,7 +243,7 @@ impl Prefix for Prefix2 {
     }
 
     fn entrypoint(dict: &mut Dict) -> Prefix2 {
-        let none = dict.tokid(&None);
+        let none = dict.tokid(&Token::from(""));
         (none, none)
     }
 }
@@ -367,9 +364,9 @@ impl Chain {
         if tokens.is_empty() {
             return self;
         }
-        let none = self.dict.tokid(&None);
+        let none = self.dict.tokid(&Token::from(""));
         let mut toks = vec![none, none, none];
-        toks.extend(tokens.into_iter().map(|t| self.dict.tokid(&Some(t))));
+        toks.extend(tokens.into_iter().map(|t| self.dict.tokid(&t)));
         toks.push(none);
         toks.push(none);
         for p in toks.windows(4) {
@@ -403,44 +400,30 @@ impl Chain {
         Ok(self)
     }
 
-    fn vec_to_string(vec: Vec<String>) -> String {
-        let mut ret = String::new();
-        for s in &vec {
-            ret.push_str(&s);
-            ret.push_str(" ");
-        }
-        let len = ret.len();
-        if len > 0 {
-            ret.truncate(len - 1);
-        }
-        ret
-    }
-
     pub fn generate_from_prefix(&mut self, dir: Direction, prefix: Prefix2) -> Vec<String> {
         if self.paths.get(prefix).is_none() {
             return vec![];
         }
 
-        let none = self.dict.tokid(&None);
+        let none = self.dict.tokid(&Token::from(""));
 
         self.paths
             .iterator(dir, prefix)
             .take_while(|i| *i != none)
             .filter_map(|x| self.dict.entry(x))
-            .filter_map(|x| x.clone())
             .collect()
     }
 
     pub fn generate_one(&mut self) -> Option<String> {
-        let none = self.dict.tokid(&None);
+        let none = self.dict.tokid(&Token::from(""));
         let result = self.generate_from_prefix(Direction::Forward, (none, none));
-        Some(Chain::vec_to_string(result))
+        Some(result.join(" "))
     }
 
     pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<String> {
         let mut phrase = vec![];
         for word in start.split_whitespace() {
-            let tokid = self.dict.get_tokid(&Some(word.to_string()))?;
+            let tokid = self.dict.get_tokid(&word.to_string())?;
             phrase.push(tokid)
         }
 
@@ -466,12 +449,11 @@ impl Chain {
         let middle: Vec<_> = phrase
             .iter()
             .filter_map(|x| self.dict.entry(*x))
-            .filter_map(|x| x.clone())
             .collect();
         begin.reverse();
         begin.extend(middle);
         begin.extend(end);
-        Some(Chain::vec_to_string(begin))
+        Some(begin.join(" "))
     }
 
     fn choose_best(gens: Vec<Option<String>>, target_chars: i32) -> Option<String> {
