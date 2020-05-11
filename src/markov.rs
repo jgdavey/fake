@@ -78,7 +78,7 @@ impl BufferTokSet {
             let i = (self.c1 as usize) + shift;
             let b1 = TokID::from(self.buf[i]);
             let b2 = TokID::from(self.buf[i + 1]) << 8;
-            b1 + b2
+            b1 | b2
         } else {
             let offset = offsets[2];
             let shift = (index - offset) * 3;
@@ -86,7 +86,7 @@ impl BufferTokSet {
             let b1 = TokID::from(self.buf[i]);
             let b2 = TokID::from(self.buf[i + 1]) << 8;
             let b3 = TokID::from(self.buf[i + 2]) << 16;
-            b1 + b2 + b3
+            b1 | b2 | b3
         }
     }
     fn add1(&mut self, tok: TokID) {
