@@ -10,9 +10,9 @@ use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 
-use indexmap::IndexSet;
+use strena::{Interner, Symbol};
 
-type TokID = u32;
+type TokID = Symbol;
 type Prefix1 = TokID;
 type Prefix2 = (TokID, TokID);
 type HashTokSet = HashMap<TokID, u16>;
@@ -71,48 +71,49 @@ impl BufferTokSet {
         //  0  1  2  3    4  5  6  7    8  9  10 11 12 13 14 15 16
         let offsets = [0, self.c1 as usize, self.c1 as usize + self.c2 as usize];
         if index < offsets[1] {
-            TokID::from(self.buf[index])
+            TokID::from_usize(self.buf[index] as _)
         } else if index < offsets[2] {
             let offset = offsets[1];
             let shift = (index - offset) * 2;
             let i = (self.c1 as usize) + shift;
-            let b1 = TokID::from(self.buf[i]);
-            let b2 = TokID::from(self.buf[i + 1]) << 8;
-            b1 | b2
+            let b1 = self.buf[i] as usize;
+            let b2 = (self.buf[i + 1] as usize) << 8;
+            TokID::from_usize(b1 | b2)
         } else {
             let offset = offsets[2];
             let shift = (index - offset) * 3;
             let i = (self.c1 as usize) + (self.c2 as usize * 2) + shift;
-            let b1 = TokID::from(self.buf[i]);
-            let b2 = TokID::from(self.buf[i + 1]) << 8;
-            let b3 = TokID::from(self.buf[i + 2]) << 16;
-            b1 | b2 | b3
+            let b1 = self.buf[i] as usize;
+            let b2 = (self.buf[i + 1] as usize) << 8;
+            let b3 = (self.buf[i + 2] as usize) << 16;
+            TokID::from_usize(b1 | b2 | b3)
         }
     }
-    fn add1(&mut self, tok: TokID) {
+    fn add1(&mut self, tok: usize) {
         // Insert at end of c1
         self.buf.insert(self.c1 as usize, tok as u8);
         self.c1 += 1;
     }
-    fn add2(&mut self, tok: TokID) {
+    fn add2(&mut self, tok: usize) {
         // [b1 b2 b3 | b4 b4 b5 b5 | b6 b6 b6 b7 b7 b7]
         // Insert at end of c2
         let byte1 = tok as u8;
-        let byte2 = tok >> 8 as u8;
+        let byte2 = (tok >> 8) as u8;
         let insert = u32::from(self.c1) + u32::from(self.c2) * 2;
-        self.buf.insert(insert as usize, byte1 as u8);
-        self.buf.insert((insert + 1) as usize, byte2 as u8);
+        self.buf.insert(insert as usize, byte1);
+        self.buf.insert((insert + 1) as usize, byte2);
         self.c2 += 1;
     }
-    fn add3(&mut self, tok: TokID) {
+    fn add3(&mut self, tok: usize) {
         let byte1 = tok as u8;
-        let byte2 = tok >> 8 as u8;
-        let byte3 = tok >> 16 as u8;
-        self.buf.push(byte1 as u8);
-        self.buf.push(byte2 as u8);
-        self.buf.push(byte3 as u8);
+        let byte2 = (tok >> 8) as u8;
+        let byte3 = (tok >> 16) as u8;
+        self.buf.push(byte1);
+        self.buf.push(byte2);
+        self.buf.push(byte3);
     }
-    pub fn add(&mut self, entry: TokID) {
+    pub fn add(&mut self, tok: TokID) {
+        let entry = tok.ix();
         if entry <= 0xFF && self.c1 < 0xFFFF {
             self.add1(entry)
         } else if entry <= 0xFFFF && self.c2 < 0xFFFF {
@@ -191,31 +192,28 @@ impl TokSet for BufferTokSet {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct Dict {
-    entries: IndexSet<String>,
+    entries: Interner,
 }
 
 impl Dict {
     pub fn new() -> Dict {
         Dict {
-            entries: IndexSet::new(),
+            entries: Interner::default(),
         }
     }
 
     pub fn tokid(&mut self, token: &str) -> TokID {
-        match self.entries.get_full(token) {
-            Some((u, _)) => u as TokID,
-            None => self.entries.insert_full(token.to_string()).0 as TokID,
-        }
+        self.entries.get_or_insert(token)
     }
 
     pub fn get_tokid(&self, token: &str) -> Option<TokID> {
-        self.entries.get_full(token).map(|(u, _)| u as TokID)
+        self.entries.get(token)
     }
 
     pub fn entry(&self, token_id: TokID) -> Option<String> {
-        self.entries.get_index(token_id as usize).cloned()
+        self.entries.resolve(token_id).map(|s| s.to_string())
     }
 }
 

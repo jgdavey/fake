@@ -8,7 +8,7 @@ edition = "2018"
 clap = "^2.33"
 structopt = "0.3"
 rand = "^0.7.2"
-indexmap = "^1.3"
+strena = { git = "https://github.com/jgdavey/strena.git", rev = "f6122b94ff605f8dafa435d1bca757ce975f7031" }
 tokio = { version = "0.2", features = ["full"] }
 warp = "0.2"
 serde = { version = "1.0", features = ["derive"] }

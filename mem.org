@@ -17,3 +17,12 @@
 | Shared HashMaps, Nexts  | 187M           | 545M      |
 | Nested, shared HashMaps | 179M           | 456M      |
 
+
+** Program
+| impl                   | plots.txt |
+|------------------------+-----------|
+| hand-rolled dictionary | 502M      |
+| rodeo                  | 572M      |
+| string-interner        | 470M      |
+| strena (fork)          | 453M      |
+
