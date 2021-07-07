@@ -57,7 +57,7 @@ type MarkovRequestMessage = (MarkovRequest, mpsc::Sender<MarkovResponse>);
 
 async fn respond(
     req: MarkovRequest,
-    mut tx_req: mpsc::Sender<MarkovRequestMessage>,
+    tx_req: mpsc::Sender<MarkovRequestMessage>,
 ) -> Result<MarkovResponse, Infallible> {
     let (tx_resp, mut rx_resp) = mpsc::channel::<MarkovResponse>(1);
     tx_req.send((req, tx_resp)).await.expect("Oh noes");
@@ -116,7 +116,7 @@ async fn main() {
 
     let _responder = tokio::spawn(async move {
         while let Some(work) = rx_req.recv().await {
-            let (req, mut tx_resp): MarkovRequestMessage = work;
+            let (req, tx_resp): MarkovRequestMessage = work;
             let target = req.target.unwrap_or(20);
             if debug {
                 println!("Processing request: {:?}", req);

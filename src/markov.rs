@@ -129,47 +129,58 @@ impl BufferTokSet {
 
 #[cfg(test)]
 mod tests {
+    macro_rules! tokset {
+//        () => { BufferTokeSet::new() };
+        ($($x:expr),*) => {{
+            let mut t = BufferTokSet::new();
+            $(
+                t.add_entry(Symbol::from_usize($x));
+            )*
+            t
+        }};
+    }
+
     use super::*;
     #[test]
     fn small_values() {
-        let mut tokset = BufferTokSet::new();
-        tokset.add_entry(2);
-        tokset.add_entry(7);
-        tokset.add_entry(42);
-        assert_eq!(2, tokset.get(0));
-        assert_eq!(7, tokset.get(1));
-        assert_eq!(42, tokset.get(2));
+        let tokset = tokset!(2, 7, 42);
+        assert_eq!(Symbol::from_usize(2), tokset.get(0));
+        assert_eq!(Symbol::from_usize(7), tokset.get(1));
+        assert_eq!(Symbol::from_usize(42), tokset.get(2));
         assert_eq!(3, tokset.length());
     }
+
     #[test]
     fn large_values() {
-        let mut tokset = BufferTokSet::new();
-        tokset.add_entry(0xFFFFF);
-        tokset.add_entry(1);
-        tokset.add_entry(0xFF + 1);
-        tokset.add_entry(42);
+        let tokset = tokset!(
+            0xFFFFF,
+            1,
+            0xFF + 1,
+            42
+        );
         println!("{:?}", tokset);
-        assert_eq!(0xFFFFF, tokset.get(3));
-        assert_eq!(1, tokset.get(0));
-        assert_eq!(42, tokset.get(1));
-        assert_eq!(0xFF + 1, tokset.get(2));
+        assert_eq!(Symbol::from_usize(0xFFFFF), tokset.get(3));
+        assert_eq!(Symbol::from_usize(1), tokset.get(0));
+        assert_eq!(Symbol::from_usize(42), tokset.get(1));
+        assert_eq!(Symbol::from_usize(0xFF + 1), tokset.get(2));
         assert_eq!(4, tokset.length());
     }
+
     #[test]
     fn overflow() {
         let mut tokset = BufferTokSet::new();
         for _ in 0..1000 {
-            tokset.add_entry(0xFF + 1);
+            tokset.add_entry(Symbol::from_usize(0xFF + 1));
         }
         for _ in 0..1000 {
-            tokset.add_entry(1);
+            tokset.add_entry(Symbol::from_usize(1));
         }
         assert_eq!(2000, tokset.length());
         for i in 0..1000 {
-            assert_eq!(1, tokset.get(i));
+            assert_eq!(Symbol::from_usize(1), tokset.get(i));
         }
         for i in 1001..2000 {
-            assert_eq!(0xFF + 1, tokset.get(i));
+            assert_eq!(Symbol::from_usize(0xFF + 1), tokset.get(i));
         }
     }
 }
@@ -187,7 +198,7 @@ impl TokSet for BufferTokSet {
     }
 
     fn choose(&self, rng: &mut ThreadRng) -> TokID {
-        let n: usize = rng.gen_range(0, self.length());
+        let n: usize = rng.gen_range(0..self.length());
         self.get(n)
     }
 }
