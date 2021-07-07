@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "fake"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "rand 0.8.4",

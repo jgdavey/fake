@@ -1,6 +1,6 @@
 [package]
 name = "fake"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Joshua Davey <josh@joshuadavey.com>"]
 edition = "2018"
 
