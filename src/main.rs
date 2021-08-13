@@ -27,7 +27,7 @@ struct Config {
     #[structopt(short, long)]
     debug: bool,
 
-    /// Activate debug mode
+    /// Run server on port
     #[structopt(short, long)]
     port: Option<u16>,
 
