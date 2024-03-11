@@ -3,8 +3,8 @@ use std::io::prelude::*;
 use std::io::{self, BufRead, Error, ErrorKind};
 use std::path::PathBuf;
 
+use clap::Parser;
 use serde::{Deserialize, Serialize};
-use structopt::StructOpt;
 use tokio::sync::mpsc;
 use warp::Filter;
 
@@ -20,19 +20,19 @@ fn read_line(prompt: &str) -> io::Result<String> {
 }
 
 /// Generate text with markov chains
-#[derive(StructOpt, Debug)]
-#[structopt(name = "fake")]
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None, name = "fake")]
 struct Config {
     /// Activate debug mode
-    #[structopt(short, long)]
+    #[arg(short, long)]
     debug: bool,
 
     /// Run server on port
-    #[structopt(short, long)]
+    #[arg(short, long)]
     port: Option<u16>,
 
     /// File to process
-    #[structopt(name = "INPUT", parse(from_os_str))]
+    #[arg(id = "INPUT")]
     input: PathBuf,
 }
 
@@ -99,7 +99,7 @@ async fn repl(tx_req: mpsc::Sender<MarkovRequestMessage>) {
 
 #[tokio::main]
 async fn main() {
-    let config = Config::from_args();
+    let config = Config::parse();
     if config.debug {
         println!("Config: {:?}", config);
         println!("Indexing {}...", config.input.display());

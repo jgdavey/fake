@@ -38,7 +38,7 @@ impl TokSet for HashTokSet {
     }
 
     fn choose(&self, rng: &mut ThreadRng) -> TokID {
-        let choicev: Vec<_> = self.iter().map(|(k, v)| (k, v)).collect();
+        let choicev: Vec<_> = self.iter().collect();
         let choice = choicev.choose_weighted(rng, |e| e.1).unwrap().0;
         *choice
     }
@@ -152,12 +152,7 @@ mod tests {
 
     #[test]
     fn large_values() {
-        let tokset = tokset!(
-            0xFFFFF,
-            1,
-            0xFF + 1,
-            42
-        );
+        let tokset = tokset!(0xFFFFF, 1, 0xFF + 1, 42);
         println!("{:?}", tokset);
         assert_eq!(Symbol::from_usize(0xFFFFF), tokset.get(3));
         assert_eq!(Symbol::from_usize(1), tokset.get(0));
@@ -287,7 +282,7 @@ impl TokenPaths {
     }
 
     fn append(&mut self, prefix: Prefix2, forward_value: TokID, reverse_value: TokID) {
-        let nested = self.maps.entry(prefix.0).or_insert_with(HashMap::new);
+        let nested = self.maps.entry(prefix.0).or_default();
         let toksets = nested.entry(prefix.1).or_insert_with(NextTokens::new);
         toksets.forward.add_entry(forward_value);
         toksets.reverse.add_entry(reverse_value);
@@ -301,7 +296,7 @@ impl TokenPaths {
 
     fn iterator(&self, direction: Direction, start: Prefix2) -> TokenIter {
         TokenIter {
-            paths: &self,
+            paths: self,
             direction,
             prefix: start,
             rng: thread_rng(),
@@ -428,7 +423,7 @@ impl Chain {
     pub fn generate_one_from(&mut self, rng: &mut ThreadRng, start: &str) -> Option<Vec<String>> {
         let mut phrase = vec![];
         for word in start.split_whitespace() {
-            let tokid = self.dict.get_tokid(&word.to_string())?;
+            let tokid = self.dict.get_tokid(word)?;
             phrase.push(tokid)
         }
 
@@ -459,7 +454,7 @@ impl Chain {
     }
 
     fn choose_best(gens: Vec<Option<Vec<String>>>, target_words: i32) -> Option<Vec<String>> {
-        let mut sorted = gens.into_iter().filter_map(|o| o).collect::<Vec<_>>();
+        let mut sorted = gens.into_iter().flatten().collect::<Vec<_>>();
         sorted.sort_by_key(|s| ((s.len() as i32) - target_words).abs());
         if sorted.is_empty() {
             None
