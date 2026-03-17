@@ -84,8 +84,8 @@ async fn repl(tx_req: mpsc::Sender<MarkovRequestMessage>) {
                     target: None,
                 };
                 let resp = respond(input, tx_req.clone()).await.unwrap();
-                if let Some(gen) = resp.response {
-                    println!("\n{}\n", gen);
+                if let Some(generated) = resp.response {
+                    println!("\n{}\n", generated);
                 }
             }
             Err(_) => {

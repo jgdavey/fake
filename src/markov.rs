@@ -5,9 +5,9 @@ use std::io::{self, BufReader};
 use std::path::Path;
 use std::vec::Vec;
 
+use rand::prelude::IndexedRandom;
 use rand::rngs::ThreadRng;
-use rand::seq::SliceRandom;
-use rand::{thread_rng, Rng};
+use rand::{RngExt, rng};
 
 use strena::{Interner, Symbol};
 
@@ -183,7 +183,7 @@ impl TokSet for BufferTokSet {
     }
 
     fn choose(&self, rng: &mut ThreadRng) -> TokID {
-        let n: usize = rng.gen_range(0..self.length());
+        let n: usize = rng.random_range(0..self.length());
         self.get(n)
     }
 }
@@ -263,7 +263,7 @@ impl TokenPaths {
             paths: self,
             direction,
             prefix: start,
-            rng: thread_rng(),
+            rng: rng(),
         }
     }
 }
@@ -428,7 +428,7 @@ impl Chain {
     }
 
     pub fn generate_best_from(&mut self, start: String, target_words: i32) -> Option<String> {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let gens: Vec<_> = (1..50)
             .map(|_| self.generate_one_from(&mut rng, &start[..]))
             .collect();

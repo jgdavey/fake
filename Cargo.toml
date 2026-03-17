@@ -2,11 +2,11 @@
 name = "fake"
 version = "0.2.2"
 authors = ["Joshua Davey <josh@joshuadavey.com>"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-rand = "0.8"
+rand = "0.10"
 strena = { git = "https://github.com/jgdavey/strena.git", rev = "f6122b94ff605f8dafa435d1bca757ce975f7031" }
 tokio = { version = "1.50", features = ["full"] }
 warp = { version = "0.4", features = ["server"] }
