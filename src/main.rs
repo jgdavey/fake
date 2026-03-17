@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::io::prelude::*;
-use std::io::{self, BufRead, Error, ErrorKind};
+use std::io::{self, BufRead, Error};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -16,7 +16,7 @@ fn read_line(prompt: &str) -> io::Result<String> {
     stdout.lock().flush()?;
     let stdin = io::stdin();
     let line = stdin.lock().lines().next();
-    line.unwrap_or_else(|| Err(Error::new(ErrorKind::Other, "EOF")))
+    line.unwrap_or_else(|| Err(Error::other("EOF")))
 }
 
 /// Generate text with markov chains
