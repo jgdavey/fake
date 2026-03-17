@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::hash::Hash;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
 use std::path::Path;
@@ -19,7 +18,6 @@ type HashTokSet = HashMap<TokID, u16>;
 
 pub trait TokSet {
     fn new() -> Self;
-    fn is_empty(&self) -> bool;
     fn add_entry(&mut self, entry: TokID);
     fn choose(&self, rng: &mut ThreadRng) -> TokID;
 }
@@ -27,10 +25,6 @@ pub trait TokSet {
 impl TokSet for HashTokSet {
     fn new() -> HashTokSet {
         HashTokSet::new()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.is_empty()
     }
 
     fn add_entry(&mut self, entry: TokID) {
@@ -184,10 +178,6 @@ impl TokSet for BufferTokSet {
     fn new() -> BufferTokSet {
         BufferTokSet::new()
     }
-    fn is_empty(&self) -> bool {
-        self.length() == 0
-    }
-
     fn add_entry(&mut self, entry: TokID) {
         self.add(entry);
     }
@@ -220,32 +210,6 @@ impl Dict {
 
     pub fn entry(&self, token_id: TokID) -> Option<String> {
         self.entries.resolve(token_id).map(|s| s.to_string())
-    }
-}
-
-pub trait Prefix: Eq + Hash + Clone {
-    fn size() -> usize;
-    fn entrypoint(dict: &mut Dict) -> Self;
-}
-
-impl Prefix for Prefix1 {
-    fn size() -> usize {
-        1
-    }
-
-    fn entrypoint(dict: &mut Dict) -> Prefix1 {
-        dict.tokid("")
-    }
-}
-
-impl Prefix for Prefix2 {
-    fn size() -> usize {
-        2
-    }
-
-    fn entrypoint(dict: &mut Dict) -> Prefix2 {
-        let none = dict.tokid("");
-        (none, none)
     }
 }
 
@@ -294,7 +258,7 @@ impl TokenPaths {
             .and_then(|nested| nested.get(&prefix.1))
     }
 
-    fn iterator(&self, direction: Direction, start: Prefix2) -> TokenIter {
+    fn iterator(&'_ self, direction: Direction, start: Prefix2) -> TokenIter<'_> {
         TokenIter {
             paths: self,
             direction,
