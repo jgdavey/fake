@@ -232,3 +232,21 @@ fn choose_from(set: &CountSet, rng: &mut ThreadRng) -> TokID {
 ## Open questions
 
 1. **Temp file location.** The external sort (Option A) needs scratch space of roughly 3–4× the log size during finalization (up to ~4 GB at the 1 GB corpus ceiling). Temp files will be written to a subfolder of the output directory (e.g. `<out>/.tmp/`) and cleaned up after finalization.
+
+2. ~~**Dict serialization.**~~ Resolved. `strena` is replaced with a custom `Dict` backed by a `Vec<String>` (TokID → string) and a `HashMap<String, u32>` (string → TokID). `TokID` becomes a plain `u32`. The `dict.bin` format is:
+   ```
+   [magic: b"FAKEDICT"]          8 bytes
+   [version: u32 LE]             4 bytes
+   [num_entries: u32 LE]         4 bytes
+   -- per entry, in TokID order:
+   [tokid: u32 LE]               4 bytes (explicit, for validation)
+   [len: u16 LE]                 2 bytes
+   [utf8: u8 × len]              variable
+   ```
+   TokID 0 is always the empty string `""` (the sentinel). At load time the dict is fully reconstructed in memory; `fake serve` startup cost is one sequential read of a small file.
+
+3. **Atomic index replacement.** `dict.bin` and `chain.bin` must always be consistent — TokIDs are assigned during the same run that produces both files. If `fake index` rebuilds the index while `fake serve` is running, the serve process could read mismatched files mid-swap. Options: write both files into a versioned subdirectory and atomically re-point a symlink, or write to a temp directory and do a single directory rename.
+
+4. **Incomplete index detection.** If `fake index` is interrupted mid-write, `fake serve` should detect the partial output and fail fast rather than produce garbage. A magic header combined with a completion marker or checksum written at the very end of `chain.bin` — checked at open time — is the standard approach.
+
+5. **Endianness.** The data region in Option A uses `u32` values throughout but the byte order is unspecified. Little-endian is fine if the index will only be used on the machine that built it. If the index may be built on one machine and served on another, byte order should be made explicit in the format header.

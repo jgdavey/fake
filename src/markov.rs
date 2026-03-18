@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use indexmap::IndexSet;
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{self, BufReader};
+use std::io::{self, BufReader, BufWriter};
 use std::path::Path;
 use std::vec::Vec;
 
@@ -9,9 +10,7 @@ use rand::prelude::IndexedRandom;
 use rand::rngs::ThreadRng;
 use rand::{RngExt, rng};
 
-use strena::{Interner, Symbol};
-
-type TokID = Symbol;
+type TokID = u32;
 type Prefix1 = TokID;
 type Prefix2 = (TokID, TokID);
 type HashTokSet = HashMap<TokID, u16>;
@@ -65,22 +64,22 @@ impl BufferTokSet {
         //  0  1  2  3    4  5  6  7    8  9  10 11 12 13 14 15 16
         let offsets = [0, self.c1 as usize, self.c1 as usize + self.c2 as usize];
         if index < offsets[1] {
-            TokID::from_usize(self.buf[index] as _)
+            self.buf[index] as TokID
         } else if index < offsets[2] {
             let offset = offsets[1];
             let shift = (index - offset) * 2;
             let i = (self.c1 as usize) + shift;
-            let b1 = self.buf[i] as usize;
-            let b2 = (self.buf[i + 1] as usize) << 8;
-            TokID::from_usize(b1 | b2)
+            let b1 = self.buf[i] as u32;
+            let b2 = (self.buf[i + 1] as u32) << 8;
+            b1 | b2
         } else {
             let offset = offsets[2];
             let shift = (index - offset) * 3;
             let i = (self.c1 as usize) + (self.c2 as usize * 2) + shift;
-            let b1 = self.buf[i] as usize;
-            let b2 = (self.buf[i + 1] as usize) << 8;
-            let b3 = (self.buf[i + 2] as usize) << 16;
-            TokID::from_usize(b1 | b2 | b3)
+            let b1 = self.buf[i] as u32;
+            let b2 = (self.buf[i + 1] as u32) << 8;
+            let b3 = (self.buf[i + 2] as u32) << 16;
+            b1 | b2 | b3
         }
     }
     fn add1(&mut self, tok: usize) {
@@ -107,7 +106,7 @@ impl BufferTokSet {
         self.buf.push(byte3);
     }
     pub fn add(&mut self, tok: TokID) {
-        let entry = tok.ix();
+        let entry = tok as usize;
         if entry <= 0xFF && self.c1 < 0xFFFF {
             self.add1(entry)
         } else if entry <= 0xFFFF && self.c2 < 0xFFFF {
@@ -124,11 +123,10 @@ impl BufferTokSet {
 #[cfg(test)]
 mod tests {
     macro_rules! tokset {
-//        () => { BufferTokeSet::new() };
         ($($x:expr),*) => {{
             let mut t = BufferTokSet::new();
             $(
-                t.add_entry(Symbol::from_usize($x));
+                t.add_entry($x as TokID);
             )*
             t
         }};
@@ -138,9 +136,9 @@ mod tests {
     #[test]
     fn small_values() {
         let tokset = tokset!(2, 7, 42);
-        assert_eq!(Symbol::from_usize(2), tokset.get(0));
-        assert_eq!(Symbol::from_usize(7), tokset.get(1));
-        assert_eq!(Symbol::from_usize(42), tokset.get(2));
+        assert_eq!(2u32, tokset.get(0));
+        assert_eq!(7u32, tokset.get(1));
+        assert_eq!(42u32, tokset.get(2));
         assert_eq!(3, tokset.length());
     }
 
@@ -148,10 +146,10 @@ mod tests {
     fn large_values() {
         let tokset = tokset!(0xFFFFF, 1, 0xFF + 1, 42);
         println!("{:?}", tokset);
-        assert_eq!(Symbol::from_usize(0xFFFFF), tokset.get(3));
-        assert_eq!(Symbol::from_usize(1), tokset.get(0));
-        assert_eq!(Symbol::from_usize(42), tokset.get(1));
-        assert_eq!(Symbol::from_usize(0xFF + 1), tokset.get(2));
+        assert_eq!(0xFFFFFu32, tokset.get(3));
+        assert_eq!(1u32, tokset.get(0));
+        assert_eq!(42u32, tokset.get(1));
+        assert_eq!((0xFF + 1) as u32, tokset.get(2));
         assert_eq!(4, tokset.length());
     }
 
@@ -159,17 +157,17 @@ mod tests {
     fn overflow() {
         let mut tokset = BufferTokSet::new();
         for _ in 0..1000 {
-            tokset.add_entry(Symbol::from_usize(0xFF + 1));
+            tokset.add_entry((0xFF + 1) as TokID);
         }
         for _ in 0..1000 {
-            tokset.add_entry(Symbol::from_usize(1));
+            tokset.add_entry(1u32);
         }
         assert_eq!(2000, tokset.length());
         for i in 0..1000 {
-            assert_eq!(Symbol::from_usize(1), tokset.get(i));
+            assert_eq!(1u32, tokset.get(i));
         }
         for i in 1001..2000 {
-            assert_eq!(Symbol::from_usize(0xFF + 1), tokset.get(i));
+            assert_eq!((0xFF + 1) as u32, tokset.get(i));
         }
     }
 }
@@ -190,26 +188,77 @@ impl TokSet for BufferTokSet {
 
 #[derive(Debug)]
 pub struct Dict {
-    entries: Interner,
+    tokens: IndexSet<String>,
 }
 
 impl Dict {
     pub fn new() -> Dict {
-        Dict {
-            entries: Interner::default(),
-        }
+        let mut d = Dict { tokens: IndexSet::new() };
+        d.tokid(""); // TokID 0 is always the sentinel ""
+        d
     }
 
     pub fn tokid(&mut self, token: &str) -> TokID {
-        self.entries.get_or_insert(token)
+        let (id, _) = self.tokens.insert_full(token.to_string());
+        id as TokID
     }
 
     pub fn get_tokid(&self, token: &str) -> Option<TokID> {
-        self.entries.get(token)
+        self.tokens.get_index_of(token).map(|i| i as TokID)
     }
 
     pub fn entry(&self, token_id: TokID) -> Option<String> {
-        self.entries.resolve(token_id).map(|s| s.to_string())
+        self.tokens.get_index(token_id as usize).cloned()
+    }
+
+    pub fn len(&self) -> usize {
+        self.tokens.len()
+    }
+
+    pub fn save(&self, path: &Path) -> io::Result<()> {
+        let mut f = BufWriter::new(File::create(path)?);
+        f.write_all(b"FAKEDICT")?;
+        f.write_all(&1u32.to_le_bytes())?;
+        f.write_all(&(self.tokens.len() as u32).to_le_bytes())?;
+        for (id, s) in self.tokens.iter().enumerate() {
+            f.write_all(&(id as u32).to_le_bytes())?;
+            let bytes = s.as_bytes();
+            f.write_all(&(bytes.len() as u16).to_le_bytes())?;
+            f.write_all(bytes)?;
+        }
+        Ok(())
+    }
+
+    pub fn load(path: &Path) -> io::Result<Dict> {
+        let mut f = BufReader::new(File::open(path)?);
+        let mut magic = [0u8; 8];
+        f.read_exact(&mut magic)?;
+        if &magic != b"FAKEDICT" {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid dict file"));
+        }
+        let mut buf4 = [0u8; 4];
+        f.read_exact(&mut buf4)?;
+        if u32::from_le_bytes(buf4) != 1 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "unsupported dict version"));
+        }
+        f.read_exact(&mut buf4)?;
+        let num_entries = u32::from_le_bytes(buf4) as usize;
+        let mut tokens = IndexSet::with_capacity(num_entries);
+        let mut buf2 = [0u8; 2];
+        for expected_id in 0..num_entries {
+            f.read_exact(&mut buf4)?;
+            if u32::from_le_bytes(buf4) as usize != expected_id {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "dict entry out of order"));
+            }
+            f.read_exact(&mut buf2)?;
+            let len = u16::from_le_bytes(buf2) as usize;
+            let mut string_buf = vec![0u8; len];
+            f.read_exact(&mut string_buf)?;
+            let s = String::from_utf8(string_buf)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            tokens.insert(s);
+        }
+        Ok(Dict { tokens })
     }
 }
 
@@ -319,7 +368,7 @@ impl Chain {
     pub fn printsizes(&self) {
         println!(
             "Chain[dict: {}, paths: {}, entries: {}]",
-            self.dict.entries.len(),
+            self.dict.len(),
             self.paths.maps.len(),
             self.entries.len()
         );

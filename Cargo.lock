@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "ahash"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8fd72866655d1904d6b0997d0b07ba561047d070fbe29de039031c641b61217"
-
-[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,12 +63,6 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
-
-[[package]]
-name = "autocfg"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "base64"
@@ -225,10 +213,10 @@ name = "fake"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "indexmap",
  "rand",
  "serde",
  "serde_json",
- "strena",
  "tokio",
  "warp",
 ]
@@ -334,15 +322,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e91b62f79061a0bc2e046024cb7ba44b08419ed238ecbd9adbd787434b9e8c25"
-dependencies = [
- "autocfg",
 ]
 
 [[package]]
@@ -815,15 +794,6 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys",
-]
-
-[[package]]
-name = "strena"
-version = "0.0.0"
-source = "git+https://github.com/jgdavey/strena.git?rev=f6122b94ff605f8dafa435d1bca757ce975f7031#f6122b94ff605f8dafa435d1bca757ce975f7031"
-dependencies = [
- "ahash",
- "hashbrown 0.8.2",
 ]
 
 [[package]]
