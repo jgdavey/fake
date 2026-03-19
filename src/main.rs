@@ -2,12 +2,13 @@ use std::convert::Infallible;
 use std::io::prelude::*;
 use std::io::{self, BufRead, Error};
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use warp::Filter;
 
+mod disk;
 mod markov;
 
 fn read_line(prompt: &str) -> io::Result<String> {
@@ -19,27 +20,35 @@ fn read_line(prompt: &str) -> io::Result<String> {
     line.unwrap_or_else(|| Err(Error::other("EOF")))
 }
 
-/// Generate text with markov chains
+/// Generate text with Markov chains
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None, name = "fake")]
-struct Config {
+#[command(version, about, name = "fake")]
+struct Cli {
     /// Activate debug mode
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     debug: bool,
 
-    /// Run server on port
-    #[arg(short, long)]
-    port: Option<u16>,
-
-    /// File to process
-    #[arg(id = "INPUT")]
-    input: PathBuf,
+    #[command(subcommand)]
+    command: Commands,
 }
 
-fn setup_index(config: &Config) -> markov::Chain {
-    let mut index = markov::Chain::new();
-    index.feed_file(&config.input).unwrap();
-    index
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Build a disk index from a corpus file
+    Index {
+        /// Text corpus file to index
+        corpus: PathBuf,
+        /// Output directory for index files
+        out_dir: PathBuf,
+    },
+    /// Serve generation queries from a pre-built index
+    Serve {
+        /// Directory containing index files (chain.bin, dict.bin)
+        index_dir: PathBuf,
+        /// Run HTTP server on this port (omit for interactive REPL)
+        #[arg(short, long)]
+        port: Option<u16>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,38 +62,30 @@ struct MarkovResponse {
     response: Option<String>,
 }
 
-type MarkovRequestMessage = (MarkovRequest, mpsc::Sender<MarkovResponse>);
-
-async fn respond(
+async fn handle_request(
     req: MarkovRequest,
-    tx_req: mpsc::Sender<MarkovRequestMessage>,
-) -> Result<MarkovResponse, Infallible> {
-    let (tx_resp, mut rx_resp) = mpsc::channel::<MarkovResponse>(1);
-    tx_req.send((req, tx_resp)).await.expect("Oh noes");
-    let resp = rx_resp.recv().await;
-    Ok(resp.unwrap())
+    chain: Arc<disk::DiskChain>,
+) -> Result<impl warp::Reply, Infallible> {
+    let target = req.target.unwrap_or(20);
+    let response = match req.seed {
+        None => chain.generate_best(target),
+        Some(ref seed) => chain.generate_best_from(seed, target),
+    };
+    Ok(warp::reply::json(&MarkovResponse { response }))
 }
 
-async fn to_json(resp: MarkovResponse) -> Result<impl warp::Reply, Infallible> {
-    Ok(warp::reply::json(&resp))
-}
-
-async fn repl(tx_req: mpsc::Sender<MarkovRequestMessage>) {
+async fn repl(chain: Arc<disk::DiskChain>) {
     loop {
         let res = read_line("seed> ");
         match res {
             Ok(seed) => {
                 println!("{}", seed);
-                let seedlet = match seed.as_str() {
-                    "" => None,
-                    _ => Some(seed),
+                let response = if seed.is_empty() {
+                    chain.generate_best(20)
+                } else {
+                    chain.generate_best_from(&seed, 20)
                 };
-                let input = MarkovRequest {
-                    seed: seedlet,
-                    target: None,
-                };
-                let resp = respond(input, tx_req.clone()).await.unwrap();
-                if let Some(generated) = resp.response {
+                if let Some(generated) = response {
                     println!("\n{}\n", generated);
                 }
             }
@@ -98,53 +99,51 @@ async fn repl(tx_req: mpsc::Sender<MarkovRequestMessage>) {
 
 #[tokio::main]
 async fn main() {
-    let config = Config::parse();
-    if config.debug {
-        println!("Config: {:?}", config);
-        println!("Indexing {}...", config.input.display());
-    }
+    let cli = Cli::parse();
 
-    let mut index = setup_index(&config);
-
-    if config.debug {
-        index.printsizes();
-    }
-    let debug = config.debug;
-
-    let (tx_req, mut rx_req) = mpsc::channel::<MarkovRequestMessage>(100);
-
-    let _responder = tokio::spawn(async move {
-        while let Some(work) = rx_req.recv().await {
-            let (req, tx_resp): MarkovRequestMessage = work;
-            let target = req.target.unwrap_or(20);
-            if debug {
-                println!("Processing request: {:?}", req);
+    match cli.command {
+        Commands::Index { corpus, out_dir } => {
+            if cli.debug {
+                eprintln!("Indexing {} → {}", corpus.display(), out_dir.display());
             }
-            let response = match req.seed {
-                None => index.generate_best(target),
-                Some(seed) => index.generate_best_from(seed, target),
-            };
-            tx_resp
-                .send(MarkovResponse { response })
-                .await
-                .expect("what?");
-        }
-    });
-
-    if let Some(port) = config.port {
-        // POST / {"seed": "Sean", "target": 20}
-        let endpoint = warp::post()
-            .and(warp::body::json())
-            .and(warp::any().map(move || tx_req.clone()))
-            .and_then(respond)
-            .and_then(to_json);
-
-        if config.debug {
-            println!("Binding server on port {}", port);
+            let mut builder = disk::ChainBuilder::new(&out_dir).unwrap_or_else(|e| {
+                eprintln!("Error creating index builder: {e}");
+                std::process::exit(1);
+            });
+            builder.feed_file(&corpus).unwrap_or_else(|e| {
+                eprintln!("Error reading corpus: {e}");
+                std::process::exit(1);
+            });
+            builder.finalize().unwrap_or_else(|e| {
+                eprintln!("Error building index: {e}");
+                std::process::exit(1);
+            });
         }
 
-        warp::serve(endpoint).run(([127, 0, 0, 1], port)).await;
-    } else {
-        repl(tx_req).await;
+        Commands::Serve { index_dir, port } => {
+            if cli.debug {
+                eprintln!("Opening index at {}", index_dir.display());
+            }
+            let chain = Arc::new(disk::DiskChain::open(&index_dir).unwrap_or_else(|e| {
+                eprintln!("Error opening index: {e}");
+                std::process::exit(1);
+            }));
+
+            if let Some(port) = port {
+                // POST / {"seed": "word", "target": 20}
+                let chain_filter = warp::any().map(move || Arc::clone(&chain));
+                let endpoint = warp::post()
+                    .and(warp::body::json())
+                    .and(chain_filter)
+                    .and_then(handle_request);
+
+                if cli.debug {
+                    eprintln!("Binding server on port {port}");
+                }
+                warp::serve(endpoint).run(([127, 0, 0, 1], port)).await;
+            } else {
+                repl(chain).await;
+            }
+        }
     }
 }
